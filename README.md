@@ -33,9 +33,9 @@ All while the **Chaos Meter** rises.
 
 ## What Makes It Different
 
-- 🥷 **Adversarial Pedagogy** – The AI breaks your system on purpose.  
-- 🌐 **WASM-Powered Arena** – Runs entirely in-browser (zero setup).  
-- 📡 **Real Observability** – Unified logs, service maps, trace views.  
+- **Adversarial Pedagogy** – The AI breaks your system on purpose.  
+- **WASM-Powered Arena** – Runs entirely in-browser (zero setup).  
+- **Real Observability** – Unified logs, service maps, trace views.  
 
 ---
 
