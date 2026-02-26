@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Pyodide Pandas Example</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+  </head>
+  <body>
+    <h1>Pyodide + Pandas</h1>
+    <pre id="output"></pre>
+
+    <script>
+      async function main() {
+        const output = document.getElementById("output");
+
+        // Load Pyodide
+        const pyodide = await loadPyodide();
+
+        // Install pandas (comes precompiled for WASM)
+        await pyodide.loadPackage("pandas");
+
+        // Run Python code
+        const result = await pyodide.runPythonAsync(`
+import pandas as pd
+
+df = pd.DataFrame({
+    "name": ["Alice", "Bob", "Charlie"],
+    "age": [30, 25, 35],
+    "salary": [70000, 50000, 90000]
+})
+
+# Simple operation
+avg_salary = df["salary"].mean()
+
+df, avg_salary
+        `);
+
+        output.textContent = result.toString();
+      }
+
+      main();
+    </script>
+  </body>
+</html>
