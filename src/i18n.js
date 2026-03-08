@@ -3,13 +3,9 @@
  */
 class I18nManager {
     constructor() {
-        this.currentLocale = localStorage.getItem('game_locale') || 'en';
+        this.currentLocale = 'en';
         this.translations = {
-            en: typeof EN_TRANSLATIONS !== 'undefined' ? EN_TRANSLATIONS : {},
-            zh: typeof ZH_TRANSLATIONS !== 'undefined' ? ZH_TRANSLATIONS : {},
-            'pt-BR': typeof PT_BR_TRANSLATIONS !== 'undefined' ? PT_BR_TRANSLATIONS : {},
-            de: typeof DE_TRANSLATIONS !== 'undefined' ? DE_TRANSLATIONS : {},
-            fr: typeof FR_TRANSLATIONS !== 'undefined' ? FR_TRANSLATIONS : {}
+            en: typeof EN_TRANSLATIONS !== 'undefined' ? EN_TRANSLATIONS : {}
         };
     }
 
@@ -26,13 +22,22 @@ class I18nManager {
     }
 
     t(key, variables = {}) {
-        let text = this.translations[this.currentLocale][key] || key;
-        
+        const localeMap = this.translations[this.currentLocale] || {};
+        let text;
+
+        if (Object.prototype.hasOwnProperty.call(localeMap, key)) {
+            // Allow empty string translations on purpose
+            text = localeMap[key];
+        } else {
+            // Fallback to key when no translation entry exists
+            text = key;
+        }
+
         // Handle variable interpolation
         Object.keys(variables).forEach(varName => {
-            text = text.replace(`{${varName}}`, variables[varName]);
+            text = String(text).replace(`{${varName}}`, variables[varName]);
         });
-        
+
         return text;
     }
 

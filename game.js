@@ -1,5 +1,34 @@
 STATE.sound = new SoundService();
 
+// ==================== AI SCENARIOS ====================
+
+const SCENARIOS = [
+    {
+        id: "instagram_feed",
+        title: "Design Instagram News Feed",
+        description:
+            "Serve 100k+ RPS with sub-200ms reads. Heavy STATIC media and READ traffic, global users, and high availability expectations.",
+        targetTraffic: { read: 80, static: 20, write: 0 },
+    },
+    {
+        id: "ecommerce_flash_sale",
+        title: "E-Commerce Flash Sale",
+        description:
+            "Sudden 50x bursts with 60% WRITE (orders) and 40% READ (inventory). No orders can be dropped and DB contention must be controlled.",
+        targetTraffic: { read: 40, static: 0, write: 60 },
+    },
+    {
+        id: "whatsapp_chat",
+        title: "Global Chat Application",
+        description:
+            "Millions of concurrent connections with high WRITE (messages) and READ (history). Requires ultra-fast, unstructured storage.",
+        targetTraffic: { read: 50, static: 0, write: 50 },
+    },
+];
+
+// Default scenario for now
+let activeScenario = SCENARIOS[0];
+
 // ==================== UTILITY FUNCTIONS ====================
 
 // Format time as h:m:s, m:s, or just s depending on duration
@@ -14,6 +43,114 @@ function formatTime(totalSeconds) {
         return i18n.t('time_m', { m: mins, s: secs });
     } else {
         return i18n.t('time_s', { s: secs });
+    }
+}
+
+// ==================== BOARD STATE & AI HELPERS ====================
+
+// Returns a de-duplicated list of human-readable service names
+// e.g. ["Firewall", "API Gateway", "Load Balancer", ...]
+function getBoardState() {
+    const names = STATE.services.map((svc) => {
+        const cfg = CONFIG.services[svc.type];
+        return cfg?.name || svc.type;
+    });
+
+    return names.filter((name, idx) => name && names.indexOf(name) === idx);
+}
+
+function updateScenarioPanel() {
+    // Bottom-left AI SCENARIO panel
+    const titleEl = document.getElementById("scenario-title");
+    const descEl = document.getElementById("scenario-desc");
+
+    // Top-right MISSION & AI MENTOR panel
+    const missionTitleEl = document.getElementById("mission-title");
+    const missionDescEl = document.getElementById("mission-desc");
+
+    if (!activeScenario) return;
+
+    if (titleEl) titleEl.textContent = activeScenario.title;
+    if (descEl) descEl.textContent = activeScenario.description;
+
+    if (missionTitleEl) missionTitleEl.textContent = activeScenario.title;
+    if (missionDescEl) missionDescEl.textContent = activeScenario.description;
+}
+
+async function callSabotageAPI() {
+    try {
+        const response = await fetch("http://localhost:3000/api/sabotage", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ services: getBoardState() }),
+        });
+        const data = await response.json();
+
+        if (data?.saboteurMessage) {
+            addInterventionWarning(data.saboteurMessage, "danger", 6000);
+        }
+    } catch (err) {
+        console.error("Sabotage API failed", err);
+    }
+}
+
+async function callMentorAPI() {
+    try {
+        const response = await fetch("http://localhost:3000/api/mentor", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                services: getBoardState(),
+                scenario: activeScenario,
+            }),
+        });
+        const data = await response.json();
+
+        const hintEl = document.getElementById("mentor-hint");
+        if (hintEl && data?.hint) {
+            hintEl.textContent = data.hint;
+            hintEl.classList.remove("animate-pulse");
+            hintEl.classList.add("glitch-once");
+            setTimeout(() => hintEl.classList.remove("glitch-once"), 800);
+        }
+    } catch (err) {
+        console.error("Mentor API failed", err);
+    }
+}
+
+async function callPostmortemAPI() {
+    try {
+        const response = await fetch("http://localhost:3000/api/postmortem", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                services: getBoardState(),
+                survivalTimeSeconds: STATE.elapsedGameTime || 0,
+            }),
+        });
+        const data = await response.json();
+
+        const titleEl = document.getElementById("modal-title");
+        const descEl = document.getElementById("modal-desc");
+        const modalEl = document.getElementById("modal");
+
+        if (titleEl && descEl && modalEl) {
+            titleEl.innerText = i18n.t('system_failure') || "SIMULATION ENDED";
+            titleEl.classList.remove("text-red-500");
+            titleEl.classList.add("text-cyan-400");
+            descEl.innerHTML = data?.postmortem || "Mentor failed to generate a post-mortem.";
+            modalEl.classList.remove("hidden");
+        }
+
+        STATE.sound.playGameOver();
+    } catch (err) {
+        console.error("Postmortem API failed", err);
+    }
+}
+
+function quitSimulation() {
+    if (confirm("Are you sure you want to end this SRE simulation?")) {
+        callPostmortemAPI();
     }
 }
 
@@ -152,6 +289,8 @@ function startMaliciousSpike() {
         MALICIOUS: maliciousPct,
     };
 
+    /*
+    // Hiding the indicator bar as requested - we rely on AI Saboteur text warnings
     const indicator = document.createElement("div");
     indicator.id = "malicious-spike-indicator";
     indicator.className =
@@ -162,6 +301,7 @@ function startMaliciousSpike() {
         </div>
     `;
     document.body.appendChild(indicator);
+    */
 
     const maliciousEl = document.getElementById("mix-malicious");
     if (maliciousEl)
@@ -282,9 +422,9 @@ function startTrafficShift() {
     }
 
     addInterventionWarning(
-        i18n.t('traffic_surging', { 
-            name: i18n.t('shift_' + shift.name.toLowerCase().replace(' ', '_')), 
-            type: i18n.t('traffic_' + shift.type.toLowerCase()) 
+        i18n.t('traffic_surging', {
+            name: i18n.t('shift_' + shift.name.toLowerCase().replace(' ', '_')),
+            type: i18n.t('traffic_' + shift.type.toLowerCase())
         }),
         "warning",
         5000
@@ -1166,13 +1306,7 @@ function retryWithSameArchitecture() {
     // Reset game state but keep mode
     resetGame(STATE.gameMode);
 
-    // Deduct the architecture cost from starting budget (simulate buying services)
-    STATE.money -= totalArchitectureCost;
-    if (STATE.finances) {
-        STATE.finances.expenses.services = totalArchitectureCost;
-    }
-
-    // Rebuild services in same order (bypass cost check since we already deducted)
+    // Rebuild services — no cost deduction in simulation mode
     savedServices.forEach((saved) => {
         const pos = new THREE.Vector3(
             saved.position.x,
@@ -1297,46 +1431,22 @@ function spawnRequest() {
 }
 
 function updateScore(req, outcome) {
-    const points = CONFIG.survival.SCORE_POINTS;
     const typeConfig = req.typeConfig || CONFIG.trafficTypes[req.type];
+    const points = CONFIG.survival.SCORE_POINTS;
 
     if (outcome === "MALICIOUS_BLOCKED") {
         STATE.score.maliciousBlocked += points.MALICIOUS_BLOCKED_SCORE;
         STATE.score.total += points.MALICIOUS_BLOCKED_SCORE;
-        STATE.score.total += points.MALICIOUS_BLOCKED_SCORE;
-
-        // Mitigation cost for blocking attacks
-        const mitigationCost = CONFIG.survival.SCORE_POINTS.MALICIOUS_MITIGATION_COST || 1.0;
-        STATE.money -= mitigationCost;
-        if (STATE.finances) {
-            STATE.finances.expenses.mitigation = (STATE.finances.expenses.mitigation || 0) + mitigationCost;
-        }
+        STATE.reputation = Math.min(100, STATE.reputation + points.SUCCESS_REPUTATION);
         STATE.sound.playFraudBlocked();
     } else if (
         req.type === TRAFFIC_TYPES.MALICIOUS &&
         outcome === "MALICIOUS_PASSED"
     ) {
-        STATE.reputation += points.MALICIOUS_PASSED_REPUTATION;
-        STATE.reputation += points.MALICIOUS_PASSED_REPUTATION;
         STATE.failures.MALICIOUS++;
-
-        // Breach penalty
-        const breachPenalty = CONFIG.survival.SCORE_POINTS.MALICIOUS_BREACH_PENALTY || 50.0;
-        STATE.money -= breachPenalty;
-        if (STATE.finances) {
-            STATE.finances.expenses.breach = (STATE.finances.expenses.breach || 0) + breachPenalty;
-        }
-
-        console.warn(
-            `MALICIOUS PASSED: ${points.MALICIOUS_PASSED_REPUTATION} Rep. (Critical Failure)`
-        );
+        STATE.reputation += points.MALICIOUS_PASSED_REPUTATION;
     } else if (outcome === "COMPLETED") {
-        let reward = typeConfig.reward;
         const score = typeConfig.score;
-
-        if (req.cached) {
-            reward *= 1 + points.CACHE_HIT_BONUS;
-        }
 
         if (typeConfig.destination === "s3" || typeConfig.destination === "cdn") {
             STATE.score.storage += score;
@@ -1345,30 +1455,29 @@ function updateScore(req, outcome) {
         }
 
         STATE.score.total += score;
-        STATE.money += reward;
-        if (STATE.finances) {
-            STATE.finances.income.requests += reward;
-            STATE.finances.income.total += reward;
-            // Track by request type
-            const reqType = req.type || "STATIC";
-            STATE.finances.income.byType[reqType] =
-                (STATE.finances.income.byType[reqType] || 0) + reward;
-            STATE.finances.income.countByType[reqType] =
-                (STATE.finances.income.countByType[reqType] || 0) + 1;
-        }
-        STATE.reputation += points.SUCCESS_REPUTATION || 0.5; // Gain reputation on success
+        STATE.reputation = Math.min(100, STATE.reputation + points.SUCCESS_REPUTATION);
     } else if (outcome === "THROTTLED") {
-        // Soft fail from API Gateway rate limiting — much less reputation loss
-        STATE.reputation += points.THROTTLED_REPUTATION || -0.2;
+        STATE.reputation += points.THROTTLED_REPUTATION;
     } else if (outcome === "FAILED") {
-        STATE.reputation += points.FAIL_REPUTATION;
         STATE.score.total -= (typeConfig.score || 5) / 2;
         if (STATE.failures[req.type] !== undefined) {
             STATE.failures[req.type]++;
         }
+        STATE.reputation += points.FAIL_REPUTATION;
     }
 
+    // Explicitly update the Stability Bar UI
+    const repBar = document.getElementById("rep-bar");
+    const repDisplay = document.getElementById("rep-display");
+    if (repBar) repBar.style.width = `${Math.max(0, STATE.reputation)}%`;
+    if (repDisplay) repDisplay.textContent = `${Math.round(Math.max(0, STATE.reputation))}%`;
+
     updateScoreUI();
+
+    // Check for game over
+    if (STATE.reputation <= 0 && STATE.gameMode === "survival") {
+        callPostmortemAPI();
+    }
 }
 
 function finishRequest(req) {
@@ -1471,6 +1580,9 @@ window.startGame = () => {
     document.getElementById("main-menu-modal").classList.add("hidden");
     resetGame();
 
+    // Populate the AI scenario panel when a run starts
+    updateScenarioPanel();
+
     if (window.tutorial) {
         setTimeout(() => {
             window.tutorial.start();
@@ -1484,20 +1596,8 @@ window.startSandbox = () => {
 };
 
 function createService(type, pos) {
-    if (STATE.money < CONFIG.services[type].cost) {
-        flashMoney();
-        return;
-    }
+    // No budget check — simulation mode: services are free to place
     if (STATE.services.find((s) => s.position.distanceTo(pos) < 1)) return;
-    const cost = CONFIG.services[type].cost;
-    STATE.money -= cost;
-    if (STATE.finances) {
-        STATE.finances.expenses.services += cost;
-        STATE.finances.expenses.byService[type] =
-            (STATE.finances.expenses.byService[type] || 0) + cost;
-        STATE.finances.expenses.countByService[type] =
-            (STATE.finances.expenses.countByService[type] || 0) + 1;
-    }
     STATE.services.push(new Service(type, pos));
     STATE.sound.playPlace();
     updateRepairCostTable();
@@ -1673,7 +1773,7 @@ function deleteObject(id) {
 
     svc.destroy();
     STATE.services = STATE.services.filter((s) => s.id !== id);
-    STATE.money += Math.floor(svc.config.cost / 2);
+    // No sell refund in simulation mode
     STATE.sound.playDelete();
     updateRepairCostTable();
 }
@@ -1769,63 +1869,6 @@ container.addEventListener("wheel", (e) => {
     }
 }, { passive: false });
 
-// Upgrade Indicator Logic
-// Upgrade Indicator Logic
-let hoveredUpgradeService = null;
-let hideUpgradeTimer = null;
-const upgradeIndicator = document.getElementById("upgrade-indicator");
-const upgradeCostEl = document.getElementById("upgrade-cost");
-
-if (upgradeIndicator) {
-    upgradeIndicator.addEventListener("click", (e) => {
-        e.stopPropagation(); // Prevent map click
-        if (hoveredUpgradeService) {
-            hoveredUpgradeService.upgrade();
-
-            // Immediate UI update
-            const tiers = CONFIG.services[hoveredUpgradeService.type].tiers;
-            if (hoveredUpgradeService.tier < tiers.length) {
-                const nextCost = tiers[hoveredUpgradeService.tier].cost;
-                upgradeCostEl.textContent = `$${nextCost}`;
-
-                if (STATE.money < nextCost) {
-                    upgradeCostEl.classList.remove("bg-green-600", "border-green-400");
-                    upgradeCostEl.classList.add("bg-red-600", "border-red-400");
-                } else {
-                    upgradeCostEl.classList.remove("bg-red-600", "border-red-400");
-                    upgradeCostEl.classList.add("bg-green-600", "border-green-400");
-                }
-            } else {
-                // Max tier reached - hide immediately
-                hoveredUpgradeService = null;
-                upgradeIndicator.classList.add("hidden");
-                if (hideUpgradeTimer) {
-                    clearTimeout(hideUpgradeTimer);
-                    hideUpgradeTimer = null;
-                }
-            }
-        }
-    });
-
-    // Prevent hiding when hovering the indicator itself
-    upgradeIndicator.addEventListener("mouseenter", () => {
-        if (hideUpgradeTimer) {
-            clearTimeout(hideUpgradeTimer);
-            hideUpgradeTimer = null;
-        }
-    });
-
-    // Start hide timer when leaving indicator
-    upgradeIndicator.addEventListener("mouseleave", () => {
-        if (hoveredUpgradeService) {
-            hideUpgradeTimer = setTimeout(() => {
-                hoveredUpgradeService = null;
-                upgradeIndicator.classList.add("hidden");
-                hideUpgradeTimer = null;
-            }, 300);
-        }
-    });
-}
 
 // Keyboard navigation
 const keysPressed = {};
@@ -1909,27 +1952,6 @@ container.addEventListener("mousedown", (e) => {
             STATE.activeTool
         )
     ) {
-        // Handle upgrades for compute, db, cache, apigw, and nosql
-        if (
-            (STATE.activeTool === "lambda" && i.type === "service") ||
-            (STATE.activeTool === "db" && i.type === "service") ||
-            (STATE.activeTool === "cache" && i.type === "service") ||
-            (STATE.activeTool === "apigw" && i.type === "service") ||
-            (STATE.activeTool === "nosql" && i.type === "service")
-        ) {
-            const svc = STATE.services.find((s) => s.id === i.id);
-            if (
-                svc &&
-                ((STATE.activeTool === "lambda" && svc.type === "compute") ||
-                    (STATE.activeTool === "db" && svc.type === "db") ||
-                    (STATE.activeTool === "cache" && svc.type === "cache") ||
-                    (STATE.activeTool === "apigw" && svc.type === "apigw") ||
-                    (STATE.activeTool === "nosql" && svc.type === "nosql"))
-            ) {
-                svc.upgrade();
-                return;
-            }
-        }
         if (i.type === "ground") {
             const typeMap = {
                 waf: "waf",
@@ -2080,10 +2102,9 @@ container.addEventListener("mousemove", (e) => {
                 s.health
             )}%</span>`;
 
-            // Add static description and upkeep if available
+            // Add static description if available
             if (s.config.tooltip) {
                 content += `<br><span class="text-xs text-gray-400">${i18n.t(s.type + '_desc')}</span>`;
-                content += `<br><span class="text-xs text-gray-500">${i18n.t('upkeep_label')} <span class="text-gray-300">${i18n.t(s.config.tooltip.upkeep.toLowerCase().replace(' ', '_'))}</span></span>`;
             }
 
             content += `<div class="mt-1 border-t border-gray-700 pt-1">`;
@@ -2121,80 +2142,6 @@ container.addEventListener("mousemove", (e) => {
             }
             content += `</div>`;
 
-            // Show upgrade option for upgradeable services
-            if (
-                (STATE.activeTool === "lambda" && s.type === "compute") ||
-                (STATE.activeTool === "db" && s.type === "db") ||
-                (STATE.activeTool === "cache" && s.type === "cache") ||
-                (STATE.activeTool === "apigw" && s.type === "apigw") ||
-                (STATE.activeTool === "nosql" && s.type === "nosql")
-            ) {
-                const tiers = CONFIG.services[s.type].tiers;
-                if (s.tier < tiers.length) {
-                    cursor = "pointer";
-                    const nextCost = tiers[s.tier].cost;
-                    content += `<div class="mt-1 pt-1 border-t border-gray-700"><span class="text-green-300 text-xs font-bold">${i18n.t('upgrade_label')} $${nextCost}</span></div>`;
-                    if (s.mesh.material.emissive)
-                        s.mesh.material.emissive.setHex(0x333333);
-                } else {
-                    content += `<div class="mt-1 pt-1 border-t border-gray-700"><span class="text-gray-500 text-xs">${i18n.t('max_tier')}</span></div>`;
-                }
-            }
-
-            // SHOW UPGRADE INDICATOR (Green Arrow)
-            if (["compute", "db", "cache", "apigw", "nosql"].includes(s.type)) {
-                const tiers = CONFIG.services[s.type].tiers;
-                if (s.tier < tiers.length) {
-                    // Clear any pending hide timer since we are hovering a valid service
-                    if (hideUpgradeTimer) {
-                        clearTimeout(hideUpgradeTimer);
-                        hideUpgradeTimer = null;
-                    }
-
-                    hoveredUpgradeService = s;
-                    const nextCost = tiers[s.tier].cost;
-
-                    // Project 3D position to 2D screen
-                    const pos = s.mesh.position.clone();
-                    pos.y += 3; // Offset above service
-                    pos.project(camera);
-
-                    const x = (pos.x * .5 + .5) * container.clientWidth;
-                    const y = (pos.y * -.5 + .5) * container.clientHeight;
-
-                    if (upgradeIndicator && upgradeCostEl) {
-                        upgradeIndicator.style.left = `${x}px`;
-                        upgradeIndicator.style.top = `${y}px`;
-                        upgradeIndicator.classList.remove("hidden");
-                        upgradeCostEl.textContent = `$${nextCost}`;
-
-                        // Color code cost
-                        if (STATE.money < nextCost) {
-                            upgradeCostEl.classList.remove("bg-green-600", "border-green-400");
-                            upgradeCostEl.classList.add("bg-red-600", "border-red-400");
-                        } else {
-                            upgradeCostEl.classList.remove("bg-red-600", "border-red-400");
-                            upgradeCostEl.classList.add("bg-green-600", "border-green-400");
-                        }
-                    }
-                } else {
-                    // Max tier
-                    if (hoveredUpgradeService === s) {
-                        hoveredUpgradeService = null;
-                        if (upgradeIndicator) upgradeIndicator.classList.add("hidden");
-                    }
-                }
-            } else {
-                // Not an upgradeable service or different type - trigger hide
-                if (hoveredUpgradeService && !hideUpgradeTimer) {
-                    hideUpgradeTimer = setTimeout(() => {
-                        hoveredUpgradeService = null;
-                        if (upgradeIndicator) upgradeIndicator.classList.add("hidden");
-                        hideUpgradeTimer = null;
-                    }, 300);
-                }
-            }
-
             showTooltip(e.clientX + 15, e.clientY + 15, content);
 
             // Reset previous highlights
@@ -2210,29 +2157,20 @@ container.addEventListener("mousemove", (e) => {
             if (svc.mesh.material.emissive)
                 svc.mesh.material.emissive.setHex(0x000000);
         });
-
-        // Hide upgrade indicator if visible (with delay)
-        if (hoveredUpgradeService && !hideUpgradeTimer) {
-            hideUpgradeTimer = setTimeout(() => {
-                hoveredUpgradeService = null;
-                if (upgradeIndicator) upgradeIndicator.classList.add("hidden");
-                hideUpgradeTimer = null;
-            }, 300);
-        }
     }
 
     container.style.cursor = cursor;
 });
 
-        // clear failure list
-        document.getElementById('clear-all').addEventListener('click',()=>{
-            STATE.failures.MALICIOUS=0;
-            STATE.failures.STATIC=0;
-            STATE.failures.READ=0;
-            STATE.failures.WRITE=0;
-            STATE.failures.UPLOAD=0;
-            STATE.failures.SEARCH=0;
-        })
+// clear failure list
+document.getElementById('clear-all').addEventListener('click', () => {
+    STATE.failures.MALICIOUS = 0;
+    STATE.failures.STATIC = 0;
+    STATE.failures.READ = 0;
+    STATE.failures.WRITE = 0;
+    STATE.failures.UPLOAD = 0;
+    STATE.failures.SEARCH = 0;
+})
 
 // Helper function for showing tooltips
 function showTooltip(x, y, html) {
@@ -2257,13 +2195,10 @@ function setupUITooltips() {
         if (config && config.tooltip) {
             btn.addEventListener("mousemove", (e) => {
                 const content = `
-                    <strong class="text-blue-300">${i18n.t(serviceKey)}</strong> <span class="text-green-400">$${config.cost}</span><br>
-                    <span class="text-xs text-gray-400">${i18n.t(serviceKey + '_desc')}</span><br>
-                    <div class="mt-1 pt-1 border-t border-gray-700 flex justify-between text-xs">
-                        <span class="text-gray-500">${i18n.t('upkeep_label')} <span class="text-gray-300">${i18n.t(config.tooltip.upkeep.toLowerCase().replace(' ', '_'))}</span></span>
-                    </div>
+                    <strong class="text-blue-300">${i18n.t(serviceKey)}</strong><br>
+                    <span class="text-xs text-gray-400">${i18n.t(serviceKey + '_desc')}</span>
                 `;
-                showTooltip(e.clientX + 15, e.clientY - 100, content); // Show above the button
+                showTooltip(e.clientX + 15, e.clientY - 80, content);
             });
 
             btn.addEventListener("mouseleave", () => {
@@ -2347,7 +2282,7 @@ function animate(time) {
     const moveSpeed = 50 * clampedDt; // Use unscaled time so we can move while paused
     // If zoomed in (zoom > 1), we might want to move slower, or just keep it constant world space
     // Constant world space is usually better.
-    // Three.js OrthographicCamera zoom does not affect world coordinates directly, 
+    // Three.js OrthographicCamera zoom does not affect world coordinates directly,
     // so moving camera.position by X moves it by X world units regardless of zoom.
 
     // Adjust speed based on zoom? Often players expect faster panning when zoomed out.
@@ -2456,47 +2391,32 @@ function animate(time) {
     // Intervention mechanics updates
     updateTrafficShift(dt);
     updateRandomEvents(dt);
+
+    // AI timers (real saboteur & mentor polling)
+    if (STATE.ai) {
+        STATE.ai.sabotageTimer += dt;
+        STATE.ai.mentorTimer += dt;
+
+        // Saboteur: every 60 seconds
+        if (STATE.ai.sabotageTimer >= 60) {
+            STATE.ai.sabotageTimer = 0;
+            callSabotageAPI();
+        }
+
+        // Mentor: every 30 seconds
+        if (STATE.ai.mentorTimer >= 30) {
+            STATE.ai.mentorTimer = 0;
+            callMentorAPI();
+        }
+    }
     updateServiceHealthIndicators();
     updateActiveEventTimer();
     processAutoRepair(dt);
     updateFinancesDisplay();
 
-    document.getElementById("money-display").innerText = `$${Math.floor(
-        STATE.money
-    )}`;
-
-    const baseUpkeep = STATE.services.reduce(
-        (sum, s) => sum + s.config.upkeep / 60,
-        0
-    );
-    const multiplier =
-        typeof getUpkeepMultiplier === "function" ? getUpkeepMultiplier() : 1.0;
-    const autoRepairCost =
-        typeof getAutoRepairUpkeep === "function" ? getAutoRepairUpkeep() : 0;
-    const totalUpkeep = baseUpkeep * multiplier + autoRepairCost;
-
-    // Deduct auto-repair cost and track it
-    if (autoRepairCost > 0 && STATE.upkeepEnabled) {
-        const cost = autoRepairCost * dt;
-        STATE.money -= cost;
-        if (STATE.finances) STATE.finances.expenses.autoRepair += cost;
-    }
-
+    // Upkeep is disabled in simulation mode — no budget deductions
     const upkeepDisplay = document.getElementById("upkeep-display");
-    if (upkeepDisplay) {
-        if (autoRepairCost > 0) {
-            upkeepDisplay.innerText = `-$${totalUpkeep.toFixed(2)}/s ${i18n.t('plus_repair')}`;
-            upkeepDisplay.className = "text-orange-400 font-mono";
-        } else if (multiplier > 1.05) {
-            upkeepDisplay.innerText = `-$${totalUpkeep.toFixed(
-                2
-            )}/s (×${multiplier.toFixed(2)})`;
-            upkeepDisplay.className = "text-red-400 font-mono";
-        } else {
-            upkeepDisplay.innerText = `-$${totalUpkeep.toFixed(2)}/s`;
-            upkeepDisplay.className = "text-red-400 font-mono";
-        }
-    }
+    if (upkeepDisplay) upkeepDisplay.innerText = "";
 
     if (STATE.gameMode === "survival") {
         const staticEl = document.getElementById("mix-static");
@@ -2527,13 +2447,7 @@ function animate(time) {
     }
 
     STATE.reputation = Math.min(100, STATE.reputation);
-    document.getElementById("rep-bar").style.width = `${Math.max(
-        0,
-        STATE.reputation
-    )}%`;
-    document.getElementById("rep-display").textContent = `${Math.round(
-        Math.max(0, STATE.reputation)
-    )}%`;
+    // Reputation updates hidden — elements are display:none stubs
     document.getElementById(
         "rps-display"
     ).innerText = `${STATE.currentRPS.toFixed(1)} ${i18n.t('req_per_sec')}`;
@@ -2640,46 +2554,7 @@ function animate(time) {
         }
     }
 
-    // Game over only in survival mode
-    if (
-        STATE.gameMode === "survival" &&
-        (STATE.reputation <= 0 || STATE.money <= -1000)
-    ) {
-        STATE.isRunning = false;
-
-        // Determine failure reason and generate tips
-        const failureAnalysis = analyzeFailure();
-
-        document.getElementById("modal-title").innerText = i18n.t('system_failure');
-        document.getElementById("modal-title").classList.add("text-red-500");
-        document.getElementById("modal-desc").innerHTML = `
-            <div class="text-left space-y-3">
-                <div class="text-center text-2xl font-bold text-yellow-400 mb-2">${i18n.t('final_score', { score: STATE.score.total })}</div>
-                <div class="text-center text-sm text-gray-400 mb-4">${i18n.t('survived_time', { time: formatTime(STATE.elapsedGameTime || 0) })}</div>
-                
-                <div class="bg-red-900/30 border border-red-500/50 rounded-lg p-3">
-                    <div class="text-red-400 font-bold text-sm uppercase mb-1">${i18n.t('failure_reason')}</div>
-                    <div class="text-white">${failureAnalysis.reason}</div>
-                </div>
-                
-                <div class="bg-blue-900/30 border border-blue-500/50 rounded-lg p-3">
-                    <div class="text-blue-400 font-bold text-sm uppercase mb-1">${i18n.t('analysis')}</div>
-                    <div class="text-gray-300 text-sm">${failureAnalysis.description}</div>
-                </div>
-                
-                <div class="bg-green-900/30 border border-green-500/50 rounded-lg p-3">
-                    <div class="text-green-400 font-bold text-sm uppercase mb-1">${i18n.t('tips_title')}</div>
-                    <ul class="text-gray-300 text-sm list-disc list-inside space-y-1">
-                        ${failureAnalysis.tips
-                .map((tip) => `<li>${tip}</li>`)
-                .join("")}
-                    </ul>
-                </div>
-            </div>
-        `;
-        document.getElementById("modal").classList.remove("hidden");
-        STATE.sound.playGameOver();
-    }
+    // No game over in simulation mode — runs indefinitely
 
     renderer.render(scene, camera);
 }
@@ -2713,9 +2588,9 @@ function analyzeFailure() {
                 .sort((a, b) => b[1] - a[1])[0];
 
             if (worstFailure && worstFailure[1] > 0) {
-                result.description = i18n.t('reason_failed_type', { 
-                    type: i18n.t('traffic_' + worstFailure[0].toLowerCase()), 
-                    count: worstFailure[1] 
+                result.description = i18n.t('reason_failed_type', {
+                    type: i18n.t('traffic_' + worstFailure[0].toLowerCase()),
+                    count: worstFailure[1]
                 });
 
                 if (worstFailure[0] === "STATIC" || worstFailure[0] === "UPLOAD") {
@@ -2997,7 +2872,7 @@ window.saveGameState = (saveAs = "browser") => {
             internetConnections: [...STATE.internetNode.connections],
         };
 
-        if(saveAs === "file")
+        if (saveAs === "file")
             downloadSaveFile(saveData);
         else
             localStorage.setItem("serverSurvivalSave", JSON.stringify(saveData));
@@ -3114,15 +2989,15 @@ window.onClickContinueGame = () => {
 function loadGameState(saveData = null) {
     try {
         // If saveData is not provided, attempt to load from localStorage
-        if(!saveData){
+        if (!saveData) {
             const saveDataStr = localStorage.getItem("serverSurvivalSave");
             if (!saveDataStr) {
                 alert(i18n.t('no_save_found_msg'));
                 return;
             }
-    
+
             saveData = JSON.parse(saveDataStr);
-    
+
         }
 
         // Migrate old saves if version is missing or 1.0
@@ -3310,3 +3185,6 @@ function restoreConnections(savedConnections, internetConnections) {
         createConnection(connData.from, connData.to);
     });
 }
+
+// Initialize AI scenario panel on load
+updateScenarioPanel();

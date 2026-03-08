@@ -145,65 +145,7 @@ class Service {
   }
 
   upgrade() {
-    if (!["compute", "db", "cache", "apigw", "nosql"].includes(this.type)) return;
-    const tiers = CONFIG.services[this.type].tiers;
-    if (this.tier >= tiers.length) return;
-
-    const nextTier = tiers[this.tier];
-    if (STATE.money < nextTier.cost) {
-      flashMoney();
-      return;
-    }
-
-    STATE.money -= nextTier.cost;
-    // Track upgrade costs in finances
-    if (STATE.finances) {
-      STATE.finances.expenses.services += nextTier.cost;
-      STATE.finances.expenses.byService[this.type] =
-        (STATE.finances.expenses.byService[this.type] || 0) + nextTier.cost;
-    }
-    this.tier++;
-    this.config = { ...this.config, capacity: nextTier.capacity };
-
-    // Update cacheHitRate for cache type
-    if (this.type === "cache" && nextTier.cacheHitRate) {
-      this.config = { ...this.config, cacheHitRate: nextTier.cacheHitRate };
-    }
-
-    // Update rateLimit for apigw type
-    if (this.type === "apigw" && nextTier.rateLimit) {
-      this.config = { ...this.config, rateLimit: nextTier.rateLimit };
-    }
-
-    STATE.sound.playPlace();
-
-    // Visuals
-    let ringSize, ringColor;
-    if (this.type === "db") {
-      ringSize = 2.2;
-      ringColor = 0xff0000;
-    } else if (this.type === "cache") {
-      ringSize = 1.5;
-      ringColor = 0xdc382d; // Redis red
-    } else if (this.type === "apigw") {
-      ringSize = 1.5;
-      ringColor = 0xe879f9;
-    } else if (this.type === "nosql") {
-      ringSize = 2.0;
-      ringColor = 0x7c3aed;
-    } else {
-      ringSize = 1.3;
-      ringColor = 0xffff00;
-    }
-
-    const ringGeo = new THREE.TorusGeometry(ringSize, 0.1, 8, 32);
-    const ringMat = new THREE.MeshBasicMaterial({ color: ringColor });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = Math.PI / 2;
-    // Tier rings
-    ring.position.y = -this.mesh.position.y + (this.tier === 2 ? 0.5 : 1.0);
-    this.mesh.add(ring);
-    this.tierRings.push(ring);
+    // Upgrades are disabled in simulation mode — nodes have maximum stats by default
   }
 
   processQueue() {
@@ -274,17 +216,7 @@ class Service {
       }
     }
 
-    if (STATE.upkeepEnabled) {
-      const multiplier =
-        typeof getUpkeepMultiplier === "function" ? getUpkeepMultiplier() : 1.0;
-      const upkeepCost = (this.config.upkeep / 60) * dt * multiplier;
-      STATE.money -= upkeepCost;
-      if (STATE.finances) {
-        STATE.finances.expenses.upkeep += upkeepCost;
-        STATE.finances.expenses.byService[this.type] =
-          (STATE.finances.expenses.byService[this.type] || 0) + upkeepCost;
-      }
-    }
+    // Upkeep is disabled in simulation mode
 
     // COMPUTE PULL LOGIC
     if (this.type === "compute") {
