@@ -1,2 +1,15 @@
 .DS_Store
 .vs/
+node_modules/
+.env
+dist/
+build/
+.cache
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.idea/
+.vscode/
+*.swp
+*.swo
