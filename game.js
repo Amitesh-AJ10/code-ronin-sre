@@ -1836,63 +1836,6 @@ container.addEventListener("wheel", (e) => {
     }
 }, { passive: false });
 
-// Upgrade Indicator Logic
-// Upgrade Indicator Logic
-let hoveredUpgradeService = null;
-let hideUpgradeTimer = null;
-const upgradeIndicator = document.getElementById("upgrade-indicator");
-const upgradeCostEl = document.getElementById("upgrade-cost");
-
-if (upgradeIndicator) {
-    upgradeIndicator.addEventListener("click", (e) => {
-        e.stopPropagation(); // Prevent map click
-        if (hoveredUpgradeService) {
-            hoveredUpgradeService.upgrade();
-
-            // Immediate UI update
-            const tiers = CONFIG.services[hoveredUpgradeService.type].tiers;
-            if (hoveredUpgradeService.tier < tiers.length) {
-                const nextCost = tiers[hoveredUpgradeService.tier].cost;
-                upgradeCostEl.textContent = `$${nextCost}`;
-
-                if (STATE.money < nextCost) {
-                    upgradeCostEl.classList.remove("bg-green-600", "border-green-400");
-                    upgradeCostEl.classList.add("bg-red-600", "border-red-400");
-                } else {
-                    upgradeCostEl.classList.remove("bg-red-600", "border-red-400");
-                    upgradeCostEl.classList.add("bg-green-600", "border-green-400");
-                }
-            } else {
-                // Max tier reached - hide immediately
-                hoveredUpgradeService = null;
-                upgradeIndicator.classList.add("hidden");
-                if (hideUpgradeTimer) {
-                    clearTimeout(hideUpgradeTimer);
-                    hideUpgradeTimer = null;
-                }
-            }
-        }
-    });
-
-    // Prevent hiding when hovering the indicator itself
-    upgradeIndicator.addEventListener("mouseenter", () => {
-        if (hideUpgradeTimer) {
-            clearTimeout(hideUpgradeTimer);
-            hideUpgradeTimer = null;
-        }
-    });
-
-    // Start hide timer when leaving indicator
-    upgradeIndicator.addEventListener("mouseleave", () => {
-        if (hoveredUpgradeService) {
-            hideUpgradeTimer = setTimeout(() => {
-                hoveredUpgradeService = null;
-                upgradeIndicator.classList.add("hidden");
-                hideUpgradeTimer = null;
-            }, 300);
-        }
-    });
-}
 
 // Keyboard navigation
 const keysPressed = {};
@@ -1976,27 +1919,6 @@ container.addEventListener("mousedown", (e) => {
             STATE.activeTool
         )
     ) {
-        // Handle upgrades for compute, db, cache, apigw, and nosql
-        if (
-            (STATE.activeTool === "lambda" && i.type === "service") ||
-            (STATE.activeTool === "db" && i.type === "service") ||
-            (STATE.activeTool === "cache" && i.type === "service") ||
-            (STATE.activeTool === "apigw" && i.type === "service") ||
-            (STATE.activeTool === "nosql" && i.type === "service")
-        ) {
-            const svc = STATE.services.find((s) => s.id === i.id);
-            if (
-                svc &&
-                ((STATE.activeTool === "lambda" && svc.type === "compute") ||
-                    (STATE.activeTool === "db" && svc.type === "db") ||
-                    (STATE.activeTool === "cache" && svc.type === "cache") ||
-                    (STATE.activeTool === "apigw" && svc.type === "apigw") ||
-                    (STATE.activeTool === "nosql" && svc.type === "nosql"))
-            ) {
-                svc.upgrade();
-                return;
-            }
-        }
         if (i.type === "ground") {
             const typeMap = {
                 waf: "waf",
@@ -2147,10 +2069,9 @@ container.addEventListener("mousemove", (e) => {
                 s.health
             )}%</span>`;
 
-            // Add static description and upkeep if available
+            // Add static description if available
             if (s.config.tooltip) {
                 content += `<br><span class="text-xs text-gray-400">${i18n.t(s.type + '_desc')}</span>`;
-                content += `<br><span class="text-xs text-gray-500">${i18n.t('upkeep_label')} <span class="text-gray-300">${i18n.t(s.config.tooltip.upkeep.toLowerCase().replace(' ', '_'))}</span></span>`;
             }
 
             content += `<div class="mt-1 border-t border-gray-700 pt-1">`;
@@ -2188,80 +2109,6 @@ container.addEventListener("mousemove", (e) => {
             }
             content += `</div>`;
 
-            // Show upgrade option for upgradeable services
-            if (
-                (STATE.activeTool === "lambda" && s.type === "compute") ||
-                (STATE.activeTool === "db" && s.type === "db") ||
-                (STATE.activeTool === "cache" && s.type === "cache") ||
-                (STATE.activeTool === "apigw" && s.type === "apigw") ||
-                (STATE.activeTool === "nosql" && s.type === "nosql")
-            ) {
-                const tiers = CONFIG.services[s.type].tiers;
-                if (s.tier < tiers.length) {
-                    cursor = "pointer";
-                    const nextCost = tiers[s.tier].cost;
-                    content += `<div class="mt-1 pt-1 border-t border-gray-700"><span class="text-green-300 text-xs font-bold">${i18n.t('upgrade_label')} $${nextCost}</span></div>`;
-                    if (s.mesh.material.emissive)
-                        s.mesh.material.emissive.setHex(0x333333);
-                } else {
-                    content += `<div class="mt-1 pt-1 border-t border-gray-700"><span class="text-gray-500 text-xs">${i18n.t('max_tier')}</span></div>`;
-                }
-            }
-
-            // SHOW UPGRADE INDICATOR (Green Arrow)
-            if (["compute", "db", "cache", "apigw", "nosql"].includes(s.type)) {
-                const tiers = CONFIG.services[s.type].tiers;
-                if (s.tier < tiers.length) {
-                    // Clear any pending hide timer since we are hovering a valid service
-                    if (hideUpgradeTimer) {
-                        clearTimeout(hideUpgradeTimer);
-                        hideUpgradeTimer = null;
-                    }
-
-                    hoveredUpgradeService = s;
-                    const nextCost = tiers[s.tier].cost;
-
-                    // Project 3D position to 2D screen
-                    const pos = s.mesh.position.clone();
-                    pos.y += 3; // Offset above service
-                    pos.project(camera);
-
-                    const x = (pos.x * .5 + .5) * container.clientWidth;
-                    const y = (pos.y * -.5 + .5) * container.clientHeight;
-
-                    if (upgradeIndicator && upgradeCostEl) {
-                        upgradeIndicator.style.left = `${x}px`;
-                        upgradeIndicator.style.top = `${y}px`;
-                        upgradeIndicator.classList.remove("hidden");
-                        upgradeCostEl.textContent = `$${nextCost}`;
-
-                        // Color code cost
-                        if (STATE.money < nextCost) {
-                            upgradeCostEl.classList.remove("bg-green-600", "border-green-400");
-                            upgradeCostEl.classList.add("bg-red-600", "border-red-400");
-                        } else {
-                            upgradeCostEl.classList.remove("bg-red-600", "border-red-400");
-                            upgradeCostEl.classList.add("bg-green-600", "border-green-400");
-                        }
-                    }
-                } else {
-                    // Max tier
-                    if (hoveredUpgradeService === s) {
-                        hoveredUpgradeService = null;
-                        if (upgradeIndicator) upgradeIndicator.classList.add("hidden");
-                    }
-                }
-            } else {
-                // Not an upgradeable service or different type - trigger hide
-                if (hoveredUpgradeService && !hideUpgradeTimer) {
-                    hideUpgradeTimer = setTimeout(() => {
-                        hoveredUpgradeService = null;
-                        if (upgradeIndicator) upgradeIndicator.classList.add("hidden");
-                        hideUpgradeTimer = null;
-                    }, 300);
-                }
-            }
-
             showTooltip(e.clientX + 15, e.clientY + 15, content);
 
             // Reset previous highlights
@@ -2277,15 +2124,6 @@ container.addEventListener("mousemove", (e) => {
             if (svc.mesh.material.emissive)
                 svc.mesh.material.emissive.setHex(0x000000);
         });
-
-        // Hide upgrade indicator if visible (with delay)
-        if (hoveredUpgradeService && !hideUpgradeTimer) {
-            hideUpgradeTimer = setTimeout(() => {
-                hoveredUpgradeService = null;
-                if (upgradeIndicator) upgradeIndicator.classList.add("hidden");
-                hideUpgradeTimer = null;
-            }, 300);
-        }
     }
 
     container.style.cursor = cursor;
@@ -2324,13 +2162,10 @@ function setupUITooltips() {
         if (config && config.tooltip) {
             btn.addEventListener("mousemove", (e) => {
                 const content = `
-                    <strong class="text-blue-300">${i18n.t(serviceKey)}</strong> <span class="text-green-400">$${config.cost}</span><br>
-                    <span class="text-xs text-gray-400">${i18n.t(serviceKey + '_desc')}</span><br>
-                    <div class="mt-1 pt-1 border-t border-gray-700 flex justify-between text-xs">
-                        <span class="text-gray-500">${i18n.t('upkeep_label')} <span class="text-gray-300">${i18n.t(config.tooltip.upkeep.toLowerCase().replace(' ', '_'))}</span></span>
-                    </div>
+                    <strong class="text-blue-300">${i18n.t(serviceKey)}</strong><br>
+                    <span class="text-xs text-gray-400">${i18n.t(serviceKey + '_desc')}</span>
                 `;
-                showTooltip(e.clientX + 15, e.clientY - 100, content); // Show above the button
+                showTooltip(e.clientX + 15, e.clientY - 80, content);
             });
 
             btn.addEventListener("mouseleave", () => {
