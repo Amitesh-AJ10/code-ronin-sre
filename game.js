@@ -1287,13 +1287,7 @@ function retryWithSameArchitecture() {
     // Reset game state but keep mode
     resetGame(STATE.gameMode);
 
-    // Deduct the architecture cost from starting budget (simulate buying services)
-    STATE.money -= totalArchitectureCost;
-    if (STATE.finances) {
-        STATE.finances.expenses.services = totalArchitectureCost;
-    }
-
-    // Rebuild services in same order (bypass cost check since we already deducted)
+    // Rebuild services — no cost deduction in simulation mode
     savedServices.forEach((saved) => {
         const pos = new THREE.Vector3(
             saved.position.x,
@@ -1418,46 +1412,20 @@ function spawnRequest() {
 }
 
 function updateScore(req, outcome) {
-    const points = CONFIG.survival.SCORE_POINTS;
     const typeConfig = req.typeConfig || CONFIG.trafficTypes[req.type];
 
     if (outcome === "MALICIOUS_BLOCKED") {
-        STATE.score.maliciousBlocked += points.MALICIOUS_BLOCKED_SCORE;
-        STATE.score.total += points.MALICIOUS_BLOCKED_SCORE;
-        STATE.score.total += points.MALICIOUS_BLOCKED_SCORE;
-
-        // Mitigation cost for blocking attacks
-        const mitigationCost = CONFIG.survival.SCORE_POINTS.MALICIOUS_MITIGATION_COST || 1.0;
-        STATE.money -= mitigationCost;
-        if (STATE.finances) {
-            STATE.finances.expenses.mitigation = (STATE.finances.expenses.mitigation || 0) + mitigationCost;
-        }
+        STATE.score.maliciousBlocked += CONFIG.survival.SCORE_POINTS.MALICIOUS_BLOCKED_SCORE;
+        STATE.score.total += CONFIG.survival.SCORE_POINTS.MALICIOUS_BLOCKED_SCORE;
         STATE.sound.playFraudBlocked();
     } else if (
         req.type === TRAFFIC_TYPES.MALICIOUS &&
         outcome === "MALICIOUS_PASSED"
     ) {
-        STATE.reputation += points.MALICIOUS_PASSED_REPUTATION;
-        STATE.reputation += points.MALICIOUS_PASSED_REPUTATION;
         STATE.failures.MALICIOUS++;
-
-        // Breach penalty
-        const breachPenalty = CONFIG.survival.SCORE_POINTS.MALICIOUS_BREACH_PENALTY || 50.0;
-        STATE.money -= breachPenalty;
-        if (STATE.finances) {
-            STATE.finances.expenses.breach = (STATE.finances.expenses.breach || 0) + breachPenalty;
-        }
-
-        console.warn(
-            `MALICIOUS PASSED: ${points.MALICIOUS_PASSED_REPUTATION} Rep. (Critical Failure)`
-        );
+        // No reputation penalty in simulation mode
     } else if (outcome === "COMPLETED") {
-        let reward = typeConfig.reward;
         const score = typeConfig.score;
-
-        if (req.cached) {
-            reward *= 1 + points.CACHE_HIT_BONUS;
-        }
 
         if (typeConfig.destination === "s3" || typeConfig.destination === "cdn") {
             STATE.score.storage += score;
@@ -1466,23 +1434,10 @@ function updateScore(req, outcome) {
         }
 
         STATE.score.total += score;
-        STATE.money += reward;
-        if (STATE.finances) {
-            STATE.finances.income.requests += reward;
-            STATE.finances.income.total += reward;
-            // Track by request type
-            const reqType = req.type || "STATIC";
-            STATE.finances.income.byType[reqType] =
-                (STATE.finances.income.byType[reqType] || 0) + reward;
-            STATE.finances.income.countByType[reqType] =
-                (STATE.finances.income.countByType[reqType] || 0) + 1;
-        }
-        STATE.reputation += points.SUCCESS_REPUTATION || 0.5; // Gain reputation on success
+        // No money income in simulation mode
     } else if (outcome === "THROTTLED") {
-        // Soft fail from API Gateway rate limiting — much less reputation loss
-        STATE.reputation += points.THROTTLED_REPUTATION || -0.2;
+        // Soft throttle from API Gateway — no penalty in simulation mode
     } else if (outcome === "FAILED") {
-        STATE.reputation += points.FAIL_REPUTATION;
         STATE.score.total -= (typeConfig.score || 5) / 2;
         if (STATE.failures[req.type] !== undefined) {
             STATE.failures[req.type]++;
@@ -1608,20 +1563,8 @@ window.startSandbox = () => {
 };
 
 function createService(type, pos) {
-    if (STATE.money < CONFIG.services[type].cost) {
-        flashMoney();
-        return;
-    }
+    // No budget check — simulation mode: services are free to place
     if (STATE.services.find((s) => s.position.distanceTo(pos) < 1)) return;
-    const cost = CONFIG.services[type].cost;
-    STATE.money -= cost;
-    if (STATE.finances) {
-        STATE.finances.expenses.services += cost;
-        STATE.finances.expenses.byService[type] =
-            (STATE.finances.expenses.byService[type] || 0) + cost;
-        STATE.finances.expenses.countByService[type] =
-            (STATE.finances.expenses.countByService[type] || 0) + 1;
-    }
     STATE.services.push(new Service(type, pos));
     STATE.sound.playPlace();
     updateRepairCostTable();
@@ -1797,7 +1740,7 @@ function deleteObject(id) {
 
     svc.destroy();
     STATE.services = STATE.services.filter((s) => s.id !== id);
-    STATE.money += Math.floor(svc.config.cost / 2);
+    // No sell refund in simulation mode
     STATE.sound.playDelete();
     updateRepairCostTable();
 }
@@ -2603,42 +2546,9 @@ function animate(time) {
     processAutoRepair(dt);
     updateFinancesDisplay();
 
-    document.getElementById("money-display").innerText = `$${Math.floor(
-        STATE.money
-    )}`;
-
-    const baseUpkeep = STATE.services.reduce(
-        (sum, s) => sum + s.config.upkeep / 60,
-        0
-    );
-    const multiplier =
-        typeof getUpkeepMultiplier === "function" ? getUpkeepMultiplier() : 1.0;
-    const autoRepairCost =
-        typeof getAutoRepairUpkeep === "function" ? getAutoRepairUpkeep() : 0;
-    const totalUpkeep = baseUpkeep * multiplier + autoRepairCost;
-
-    // Deduct auto-repair cost and track it
-    if (autoRepairCost > 0 && STATE.upkeepEnabled) {
-        const cost = autoRepairCost * dt;
-        STATE.money -= cost;
-        if (STATE.finances) STATE.finances.expenses.autoRepair += cost;
-    }
-
+    // Upkeep is disabled in simulation mode — no budget deductions
     const upkeepDisplay = document.getElementById("upkeep-display");
-    if (upkeepDisplay) {
-        if (autoRepairCost > 0) {
-            upkeepDisplay.innerText = `-$${totalUpkeep.toFixed(2)}/s ${i18n.t('plus_repair')}`;
-            upkeepDisplay.className = "text-orange-400 font-mono";
-        } else if (multiplier > 1.05) {
-            upkeepDisplay.innerText = `-$${totalUpkeep.toFixed(
-                2
-            )}/s (×${multiplier.toFixed(2)})`;
-            upkeepDisplay.className = "text-red-400 font-mono";
-        } else {
-            upkeepDisplay.innerText = `-$${totalUpkeep.toFixed(2)}/s`;
-            upkeepDisplay.className = "text-red-400 font-mono";
-        }
-    }
+    if (upkeepDisplay) upkeepDisplay.innerText = "";
 
     if (STATE.gameMode === "survival") {
         const staticEl = document.getElementById("mix-static");
@@ -2669,13 +2579,7 @@ function animate(time) {
     }
 
     STATE.reputation = Math.min(100, STATE.reputation);
-    document.getElementById("rep-bar").style.width = `${Math.max(
-        0,
-        STATE.reputation
-    )}%`;
-    document.getElementById("rep-display").textContent = `${Math.round(
-        Math.max(0, STATE.reputation)
-    )}%`;
+    // Reputation updates hidden — elements are display:none stubs
     document.getElementById(
         "rps-display"
     ).innerText = `${STATE.currentRPS.toFixed(1)} ${i18n.t('req_per_sec')}`;
@@ -2782,16 +2686,7 @@ function animate(time) {
         }
     }
 
-    // Game over only in survival mode
-    if (
-        STATE.gameMode === "survival" &&
-        (STATE.reputation <= 0 || STATE.money <= -1000)
-    ) {
-        STATE.isRunning = false;
-
-        // Call AI post-mortem endpoint instead of static analysis
-        callPostmortemAPI();
-    }
+    // No game over in simulation mode — runs indefinitely
 
     renderer.render(scene, camera);
 }

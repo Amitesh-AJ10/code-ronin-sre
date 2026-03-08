@@ -18,121 +18,85 @@
     <!-- Stats Panel (Top Left) -->
     <div id="statsPanel" class="absolute top-4 left-4 glass-panel rounded-xl p-5 w-80 pointer-events-auto">
       <div class="flex justify-between items-end mb-3 border-b border-gray-700 pb-2">
-        <h1 data-i18n="survival" class="text-2xl font-bold text-red-500 tracking-widest animate-pulse">
-          SURVIVAL
+        <h1 class="text-2xl font-bold text-cyan-400 tracking-widest">
+          SIMULATION
         </h1>
         <span class="text-xs text-gray-500 font-mono">AI MODE</span>
       </div>
 
       <div class="space-y-2">
-        <div class="flex justify-between items-center">
-          <span data-i18n="budget" class="text-gray-400 text-sm">BUDGET</span>
-          <span id="money-display"
-            class="text-green-400 font-mono text-xl font-bold transition-colors duration-300">$500</span>
-        </div>
         <div class="flex justify-between items-center text-xs">
-          <span data-i18n="upkeep_cost" class="text-gray-500">Upkeep Cost</span>
-          <span id="upkeep-display" class="text-red-400 font-mono">-$0.00/s</span>
-        </div>
-        <div class="flex justify-between items-center text-xs">
-          <span data-i18n="elapsed_time" class="text-gray-500">Elapsed Time</span>
+          <span class="text-gray-500">Elapsed Time</span>
           <span id="elapsed-time" class="text-gray-400 font-mono">00:00</span>
         </div>
-        <div class="flex justify-between items-center">
-          <span data-i18n="reputation" class="text-gray-400 text-sm">REPUTATION</span>
-          <div class="flex items-center gap-2">
-            <div class="w-24 h-3 bg-gray-800 rounded-full overflow-hidden relative">
-              <div id="rep-bar" class="h-full bg-yellow-500 transition-all duration-500" style="width: 100%"></div>
-            </div>
-            <span id="rep-display" class="text-yellow-400 font-mono text-sm w-10 text-right">100%</span>
-          </div>
-        </div>
         <div class="flex justify-between items-center pt-1">
-          <span data-i18n="load_rps" class="text-gray-400 text-sm">LOAD (RPS)</span>
+          <span class="text-gray-400 text-sm">LOAD (RPS)</span>
           <span id="rps-display" class="text-blue-300 font-mono text-sm">0.0 req/s</span>
         </div>
-        <div class="flex justify-between items-center text-xs" id="rps-milestone-row">
-          <span data-i18n="next_rps_surge" class="text-gray-500">Next RPS Surge</span>
-          <div class="flex items-center gap-2 font-mono">
-            <span id="rps-next" class="text-orange-400">×1.0</span>
-          <span data-i18n="in" class="text-gray-600">in</span>
-          <span id="rps-countdown" class="text-cyan-400">0:00</span>
-          </div>
-        </div>
         <div class="flex justify-between items-center pt-1">
-          <span data-i18n="traffic" class="text-gray-400 text-sm">TRAFFIC</span>
+          <span class="text-gray-400 text-sm">TRAFFIC</span>
           <div class="flex gap-1 text-[10px] font-mono">
-            <span class="text-green-400" id="mix-static" data-i18n-title="traffic_static" title="Static GET">ST</span>
-            <span class="text-blue-400" id="mix-read" data-i18n-title="traffic_read" title="Read GET">RD</span>
-            <span class="text-orange-400" id="mix-write" data-i18n-title="traffic_write" title="Write POST">WR</span>
-            <span class="text-yellow-400" id="mix-upload" data-i18n-title="traffic_upload" title="Upload">UP</span>
-            <span class="text-cyan-400" id="mix-search" data-i18n-title="traffic_search" title="Search">SR</span>
-            <span class="text-red-400" id="mix-malicious" data-i18n-title="traffic_malicious" title="Malicious">⚠️</span>
+            <span class="text-green-400" id="mix-static" title="Static GET">ST</span>
+            <span class="text-blue-400" id="mix-read" title="Read GET">RD</span>
+            <span class="text-orange-400" id="mix-write" title="Write POST">WR</span>
+            <span class="text-yellow-400" id="mix-upload" title="Upload">UP</span>
+            <span class="text-cyan-400" id="mix-search" title="Search">SR</span>
+            <span class="text-red-400" id="mix-malicious" title="Malicious">⚠️</span>
           </div>
         </div>
 
         <!-- Failures Table -->
         <div id="failures-panel" class="mt-2 pt-2 border-t border-gray-700/50 hidden">
           <div class="flex justify-between items-center mb-2">
-            <span data-i18n="failures" class="text-gray-500 text-xs uppercase">Failures</span>
-            <span id="failures-total" class="text-red-400 font-mono text-xs">0 <span data-i18n="total">total</span></span>
-            <button id="clear-all" class="text-gray-500 hover:text-white text-[10px] font-mono transition" title="Clear all failures" > Clear </button>
+            <span class="text-gray-500 text-xs uppercase">Dropped Requests</span>
+            <span id="failures-total" class="text-red-400 font-mono text-xs">0 total</span>
+            <button id="clear-all" class="text-gray-500 hover:text-white text-[10px] font-mono transition" title="Clear all failures">Clear</button>
           </div>
           <table class="w-full text-[10px] font-mono">
             <thead>
               <tr class="text-gray-500">
-                <th data-i18n="type" class="text-left font-normal">Type</th>
-                <th data-i18n="count" class="text-right font-normal">Count</th>
-                <th data-i18n="rep_loss" class="text-right font-normal">Rep Loss</th>
+                <th class="text-left font-normal">Type</th>
+                <th class="text-right font-normal">Count</th>
               </tr>
             </thead>
             <tbody id="failures-tbody">
               <tr class="text-purple-400" id="fail-row-malicious">
-                <td data-i18n="fraud_leak">🛡️ Fraud Leak</td>
+                <td>🛡️ Fraud Leak</td>
                 <td class="text-right" id="fail-malicious">0</td>
-                <td class="text-right text-red-400" id="fail-malicious-rep">
-                  0
-                </td>
               </tr>
               <tr class="text-green-400" id="fail-row-static">
-                <td data-i18n="fail_static">ST Static</td>
+                <td>ST Static</td>
                 <td class="text-right" id="fail-static">0</td>
-                <td class="text-right text-red-400" id="fail-static-rep">
-                  0
-                </td>
               </tr>
               <tr class="text-blue-400" id="fail-row-read">
-                <td data-i18n="fail_read">RD Read</td>
+                <td>RD Read</td>
                 <td class="text-right" id="fail-read">0</td>
-                <td class="text-right text-red-400" id="fail-read-rep">0</td>
               </tr>
               <tr class="text-orange-400" id="fail-row-write">
-                <td data-i18n="fail_write">WR Write</td>
+                <td>WR Write</td>
                 <td class="text-right" id="fail-write">0</td>
-                <td class="text-right text-red-400" id="fail-write-rep">0</td>
               </tr>
               <tr class="text-yellow-400" id="fail-row-upload">
-                <td data-i18n="fail_upload">UP Upload</td>
+                <td>UP Upload</td>
                 <td class="text-right" id="fail-upload">0</td>
-                <td class="text-right text-red-400" id="fail-upload-rep">
-                  0
-                </td>
               </tr>
               <tr class="text-cyan-400" id="fail-row-search">
-                <td data-i18n="fail_search">SR Search</td>
+                <td>SR Search</td>
                 <td class="text-right" id="fail-search">0</td>
-                <td class="text-right text-red-400" id="fail-search-rep">
-                  0
-                </td>
               </tr>
             </tbody>
           </table>
         </div>
 
-        <div class="hidden flex justify-between items-center pt-3 border-t border-gray-700 mt-2">
-          <span data-i18n="total_score" class="text-gray-300 font-bold text-lg">TOTAL SCORE</span>
-          <span id="total-score-display" class="text-white font-mono text-2xl font-bold">0</span>
-        </div>
+        <!-- Hidden elements kept for JS compatibility -->
+        <span id="money-display" class="hidden"></span>
+        <span id="upkeep-display" class="hidden"></span>
+        <div id="rep-bar" class="hidden"></div>
+        <span id="rep-display" class="hidden"></span>
+        <div id="rps-milestone-row" class="hidden"></div>
+        <span id="rps-next" class="hidden"></span>
+        <span id="rps-countdown" class="hidden"></span>
+        <span id="total-score-display" class="hidden">0</span>
       </div>
     </div>
 
@@ -732,9 +696,8 @@
         </button>
 
         <button onclick="startGame()"
-          data-i18n="start_survival"
           class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-4 px-8 rounded-lg shadow-lg transform transition hover:scale-105 font-mono uppercase text-lg border border-green-400/50">
-          Start Survival
+          Start Simulation
         </button>
 
         <button onclick="startSandbox()"
@@ -1014,9 +977,9 @@
             </p>
           </div>
           <div class="bg-gray-800/30 p-3 rounded">
-            <strong data-i18n="mech_fail" class="text-white block mb-1">Failure Conditions</strong>
-            <p data-i18n="mech_fail_desc" class="text-gray-400">
-              Reputation reaches 0% or Money reaches -$1000.
+            <strong class="text-white block mb-1">Failure & Learning</strong>
+            <p class="text-gray-400">
+              Dropped requests appear in the failures panel. Use the AI Mentor hints to improve your architecture.
             </p>
           </div>
         </div>

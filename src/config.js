@@ -247,7 +247,7 @@ const CONFIG = {
     },
   },
   survival: {
-    startBudget: 420,
+    startBudget: 9999999, // effectively infinite — no budget-based game over
     baseRPS: 1.0,
     rampUp: 0.025,
     maxRPS: Infinity,
@@ -272,7 +272,7 @@ const CONFIG = {
     },
 
     upkeepScaling: {
-      enabled: true,
+      enabled: false,
       baseMultiplier: 1.0,
       maxMultiplier: 2.0,
       scaleTime: 600,
@@ -286,7 +286,7 @@ const CONFIG = {
       warningTime: 3,
     },
 
-    // Service degradation - services lose health over time
+    // Service degradation - disabled for simulation mode
     degradation: {
       enabled: false,
       healthDecayRate: 0.4, // Health points lost per second - slower decay
@@ -297,7 +297,7 @@ const CONFIG = {
       autoRepairRate: 2, // Health points per second when idle
     },
 
-    // Traffic pattern shifts - periodic changes to traffic distribution
+    // Traffic pattern shifts - disabled for simulation mode
     trafficShift: {
       enabled: false,
       interval: 40, // Faster shifts - every 40 seconds
@@ -351,7 +351,7 @@ const CONFIG = {
       ],
     },
 
-    // Random events that require immediate attention
+    // Random events - disabled; AI Saboteur handles incidents
     randomEvents: {
       enabled: false,
       minInterval: 15, // Events can happen very rapidly
