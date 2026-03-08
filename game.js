@@ -1,5 +1,34 @@
 STATE.sound = new SoundService();
 
+// ==================== AI SCENARIOS ====================
+
+const SCENARIOS = [
+    {
+        id: "instagram_feed",
+        title: "Design Instagram News Feed",
+        description:
+            "Serve 100k+ RPS with sub-200ms reads. Heavy STATIC media and READ traffic, global users, and high availability expectations.",
+        targetTraffic: { read: 80, static: 20, write: 0 },
+    },
+    {
+        id: "ecommerce_flash_sale",
+        title: "E-Commerce Flash Sale",
+        description:
+            "Sudden 50x bursts with 60% WRITE (orders) and 40% READ (inventory). No orders can be dropped and DB contention must be controlled.",
+        targetTraffic: { read: 40, static: 0, write: 60 },
+    },
+    {
+        id: "whatsapp_chat",
+        title: "Global Chat Application",
+        description:
+            "Millions of concurrent connections with high WRITE (messages) and READ (history). Requires ultra-fast, unstructured storage.",
+        targetTraffic: { read: 50, static: 0, write: 50 },
+    },
+];
+
+// Default scenario for now
+let activeScenario = SCENARIOS[1];
+
 // ==================== UTILITY FUNCTIONS ====================
 
 // Format time as h:m:s, m:s, or just s depending on duration
@@ -14,6 +43,98 @@ function formatTime(totalSeconds) {
         return i18n.t('time_m', { m: mins, s: secs });
     } else {
         return i18n.t('time_s', { s: secs });
+    }
+}
+
+// ==================== BOARD STATE & AI HELPERS ====================
+
+// Returns a de-duplicated list of human-readable service names
+// e.g. ["Firewall", "API Gateway", "Load Balancer", ...]
+function getBoardState() {
+    const names = STATE.services.map((svc) => {
+        const cfg = CONFIG.services[svc.type];
+        return cfg?.name || svc.type;
+    });
+
+    return names.filter((name, idx) => name && names.indexOf(name) === idx);
+}
+
+function updateScenarioPanel() {
+    const titleEl = document.getElementById("scenario-title");
+    const descEl = document.getElementById("scenario-desc");
+    if (!titleEl || !descEl || !activeScenario) return;
+
+    titleEl.textContent = activeScenario.title;
+    descEl.textContent = activeScenario.description;
+}
+
+async function callSabotageAPI() {
+    try {
+        const response = await fetch("http://localhost:3000/api/sabotage", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ services: getBoardState() }),
+        });
+        const data = await response.json();
+
+        if (data?.saboteurMessage) {
+            addInterventionWarning(data.saboteurMessage, "danger", 6000);
+        }
+    } catch (err) {
+        console.error("Sabotage API failed", err);
+    }
+}
+
+async function callMentorAPI() {
+    try {
+        const response = await fetch("http://localhost:3000/api/mentor", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                services: getBoardState(),
+                scenario: activeScenario,
+            }),
+        });
+        const data = await response.json();
+
+        const hintEl = document.getElementById("mentor-hint");
+        if (hintEl && data?.hint) {
+            hintEl.textContent = data.hint;
+            hintEl.classList.remove("animate-pulse");
+            hintEl.classList.add("glitch-once");
+            setTimeout(() => hintEl.classList.remove("glitch-once"), 800);
+        }
+    } catch (err) {
+        console.error("Mentor API failed", err);
+    }
+}
+
+async function callPostmortemAPI() {
+    try {
+        const response = await fetch("http://localhost:3000/api/postmortem", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                services: getBoardState(),
+                survivalTimeSeconds: STATE.elapsedGameTime || 0,
+            }),
+        });
+        const data = await response.json();
+
+        const titleEl = document.getElementById("modal-title");
+        const descEl = document.getElementById("modal-desc");
+        const modalEl = document.getElementById("modal");
+
+        if (titleEl && descEl && modalEl) {
+            titleEl.innerText = i18n.t('system_failure');
+            titleEl.classList.add("text-red-500");
+            descEl.innerHTML = data?.postmortem || "Mentor failed to generate a post-mortem.";
+            modalEl.classList.remove("hidden");
+        }
+
+        STATE.sound.playGameOver();
+    } catch (err) {
+        console.error("Postmortem API failed", err);
     }
 }
 
@@ -282,9 +403,9 @@ function startTrafficShift() {
     }
 
     addInterventionWarning(
-        i18n.t('traffic_surging', { 
-            name: i18n.t('shift_' + shift.name.toLowerCase().replace(' ', '_')), 
-            type: i18n.t('traffic_' + shift.type.toLowerCase()) 
+        i18n.t('traffic_surging', {
+            name: i18n.t('shift_' + shift.name.toLowerCase().replace(' ', '_')),
+            type: i18n.t('traffic_' + shift.type.toLowerCase())
         }),
         "warning",
         5000
@@ -1471,6 +1592,9 @@ window.startGame = () => {
     document.getElementById("main-menu-modal").classList.add("hidden");
     resetGame();
 
+    // Populate the AI scenario panel when a run starts
+    updateScenarioPanel();
+
     if (window.tutorial) {
         setTimeout(() => {
             window.tutorial.start();
@@ -2224,15 +2348,15 @@ container.addEventListener("mousemove", (e) => {
     container.style.cursor = cursor;
 });
 
-        // clear failure list
-        document.getElementById('clear-all').addEventListener('click',()=>{
-            STATE.failures.MALICIOUS=0;
-            STATE.failures.STATIC=0;
-            STATE.failures.READ=0;
-            STATE.failures.WRITE=0;
-            STATE.failures.UPLOAD=0;
-            STATE.failures.SEARCH=0;
-        })
+// clear failure list
+document.getElementById('clear-all').addEventListener('click', () => {
+    STATE.failures.MALICIOUS = 0;
+    STATE.failures.STATIC = 0;
+    STATE.failures.READ = 0;
+    STATE.failures.WRITE = 0;
+    STATE.failures.UPLOAD = 0;
+    STATE.failures.SEARCH = 0;
+})
 
 // Helper function for showing tooltips
 function showTooltip(x, y, html) {
@@ -2347,7 +2471,7 @@ function animate(time) {
     const moveSpeed = 50 * clampedDt; // Use unscaled time so we can move while paused
     // If zoomed in (zoom > 1), we might want to move slower, or just keep it constant world space
     // Constant world space is usually better.
-    // Three.js OrthographicCamera zoom does not affect world coordinates directly, 
+    // Three.js OrthographicCamera zoom does not affect world coordinates directly,
     // so moving camera.position by X moves it by X world units regardless of zoom.
 
     // Adjust speed based on zoom? Often players expect faster panning when zoomed out.
@@ -2456,6 +2580,24 @@ function animate(time) {
     // Intervention mechanics updates
     updateTrafficShift(dt);
     updateRandomEvents(dt);
+
+    // AI timers (real saboteur & mentor polling)
+    if (STATE.ai) {
+        STATE.ai.sabotageTimer += dt;
+        STATE.ai.mentorTimer += dt;
+
+        // Saboteur: every 60 seconds
+        if (STATE.ai.sabotageTimer >= 60) {
+            STATE.ai.sabotageTimer = 0;
+            callSabotageAPI();
+        }
+
+        // Mentor: every 30 seconds
+        if (STATE.ai.mentorTimer >= 30) {
+            STATE.ai.mentorTimer = 0;
+            callMentorAPI();
+        }
+    }
     updateServiceHealthIndicators();
     updateActiveEventTimer();
     processAutoRepair(dt);
@@ -2647,38 +2789,8 @@ function animate(time) {
     ) {
         STATE.isRunning = false;
 
-        // Determine failure reason and generate tips
-        const failureAnalysis = analyzeFailure();
-
-        document.getElementById("modal-title").innerText = i18n.t('system_failure');
-        document.getElementById("modal-title").classList.add("text-red-500");
-        document.getElementById("modal-desc").innerHTML = `
-            <div class="text-left space-y-3">
-                <div class="text-center text-2xl font-bold text-yellow-400 mb-2">${i18n.t('final_score', { score: STATE.score.total })}</div>
-                <div class="text-center text-sm text-gray-400 mb-4">${i18n.t('survived_time', { time: formatTime(STATE.elapsedGameTime || 0) })}</div>
-                
-                <div class="bg-red-900/30 border border-red-500/50 rounded-lg p-3">
-                    <div class="text-red-400 font-bold text-sm uppercase mb-1">${i18n.t('failure_reason')}</div>
-                    <div class="text-white">${failureAnalysis.reason}</div>
-                </div>
-                
-                <div class="bg-blue-900/30 border border-blue-500/50 rounded-lg p-3">
-                    <div class="text-blue-400 font-bold text-sm uppercase mb-1">${i18n.t('analysis')}</div>
-                    <div class="text-gray-300 text-sm">${failureAnalysis.description}</div>
-                </div>
-                
-                <div class="bg-green-900/30 border border-green-500/50 rounded-lg p-3">
-                    <div class="text-green-400 font-bold text-sm uppercase mb-1">${i18n.t('tips_title')}</div>
-                    <ul class="text-gray-300 text-sm list-disc list-inside space-y-1">
-                        ${failureAnalysis.tips
-                .map((tip) => `<li>${tip}</li>`)
-                .join("")}
-                    </ul>
-                </div>
-            </div>
-        `;
-        document.getElementById("modal").classList.remove("hidden");
-        STATE.sound.playGameOver();
+        // Call AI post-mortem endpoint instead of static analysis
+        callPostmortemAPI();
     }
 
     renderer.render(scene, camera);
@@ -2713,9 +2825,9 @@ function analyzeFailure() {
                 .sort((a, b) => b[1] - a[1])[0];
 
             if (worstFailure && worstFailure[1] > 0) {
-                result.description = i18n.t('reason_failed_type', { 
-                    type: i18n.t('traffic_' + worstFailure[0].toLowerCase()), 
-                    count: worstFailure[1] 
+                result.description = i18n.t('reason_failed_type', {
+                    type: i18n.t('traffic_' + worstFailure[0].toLowerCase()),
+                    count: worstFailure[1]
                 });
 
                 if (worstFailure[0] === "STATIC" || worstFailure[0] === "UPLOAD") {
@@ -2997,7 +3109,7 @@ window.saveGameState = (saveAs = "browser") => {
             internetConnections: [...STATE.internetNode.connections],
         };
 
-        if(saveAs === "file")
+        if (saveAs === "file")
             downloadSaveFile(saveData);
         else
             localStorage.setItem("serverSurvivalSave", JSON.stringify(saveData));
@@ -3114,15 +3226,15 @@ window.onClickContinueGame = () => {
 function loadGameState(saveData = null) {
     try {
         // If saveData is not provided, attempt to load from localStorage
-        if(!saveData){
+        if (!saveData) {
             const saveDataStr = localStorage.getItem("serverSurvivalSave");
             if (!saveDataStr) {
                 alert(i18n.t('no_save_found_msg'));
                 return;
             }
-    
+
             saveData = JSON.parse(saveDataStr);
-    
+
         }
 
         // Migrate old saves if version is missing or 1.0

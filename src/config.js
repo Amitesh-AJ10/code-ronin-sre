@@ -288,7 +288,7 @@ const CONFIG = {
 
     // Service degradation - services lose health over time
     degradation: {
-      enabled: true,
+      enabled: false,
       healthDecayRate: 0.4, // Health points lost per second - slower decay
       criticalHealth: 40, // Higher threshold for critical state
       repairCostPercent: 0.15, // 15% of service cost to repair
@@ -299,7 +299,7 @@ const CONFIG = {
 
     // Traffic pattern shifts - periodic changes to traffic distribution
     trafficShift: {
-      enabled: true,
+      enabled: false,
       interval: 40, // Faster shifts - every 40 seconds
       duration: 25, // Shorter duration keeps things dynamic
       warningTime: 3, // Less warning = more reactive gameplay
@@ -353,7 +353,7 @@ const CONFIG = {
 
     // Random events that require immediate attention
     randomEvents: {
-      enabled: true,
+      enabled: false,
       minInterval: 15, // Events can happen very rapidly
       maxInterval: 45, // Frequent events keep players engaged
       checkInterval: 30, // How often to check for triggering events

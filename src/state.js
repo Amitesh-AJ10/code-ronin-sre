@@ -94,5 +94,11 @@ const STATE = {
 
         // Warning state
         warnings: []
+    },
+
+    // AI timers/state
+    ai: {
+        sabotageTimer: 0,
+        mentorTimer: 0
     }
 };
