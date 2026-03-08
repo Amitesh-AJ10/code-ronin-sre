@@ -27,7 +27,7 @@ const SCENARIOS = [
 ];
 
 // Default scenario for now
-let activeScenario = SCENARIOS[1];
+let activeScenario = SCENARIOS[0];
 
 // ==================== UTILITY FUNCTIONS ====================
 
@@ -60,12 +60,21 @@ function getBoardState() {
 }
 
 function updateScenarioPanel() {
+    // Bottom-left AI SCENARIO panel
     const titleEl = document.getElementById("scenario-title");
     const descEl = document.getElementById("scenario-desc");
-    if (!titleEl || !descEl || !activeScenario) return;
 
-    titleEl.textContent = activeScenario.title;
-    descEl.textContent = activeScenario.description;
+    // Top-right MISSION & AI MENTOR panel
+    const missionTitleEl = document.getElementById("mission-title");
+    const missionDescEl = document.getElementById("mission-desc");
+
+    if (!activeScenario) return;
+
+    if (titleEl) titleEl.textContent = activeScenario.title;
+    if (descEl) descEl.textContent = activeScenario.description;
+
+    if (missionTitleEl) missionTitleEl.textContent = activeScenario.title;
+    if (missionDescEl) missionDescEl.textContent = activeScenario.description;
 }
 
 async function callSabotageAPI() {
@@ -126,8 +135,9 @@ async function callPostmortemAPI() {
         const modalEl = document.getElementById("modal");
 
         if (titleEl && descEl && modalEl) {
-            titleEl.innerText = i18n.t('system_failure');
-            titleEl.classList.add("text-red-500");
+            titleEl.innerText = i18n.t('system_failure') || "SIMULATION ENDED";
+            titleEl.classList.remove("text-red-500");
+            titleEl.classList.add("text-cyan-400");
             descEl.innerHTML = data?.postmortem || "Mentor failed to generate a post-mortem.";
             modalEl.classList.remove("hidden");
         }
@@ -135,6 +145,12 @@ async function callPostmortemAPI() {
         STATE.sound.playGameOver();
     } catch (err) {
         console.error("Postmortem API failed", err);
+    }
+}
+
+function quitSimulation() {
+    if (confirm("Are you sure you want to end this SRE simulation?")) {
+        callPostmortemAPI();
     }
 }
 
@@ -273,6 +289,8 @@ function startMaliciousSpike() {
         MALICIOUS: maliciousPct,
     };
 
+    /*
+    // Hiding the indicator bar as requested - we rely on AI Saboteur text warnings
     const indicator = document.createElement("div");
     indicator.id = "malicious-spike-indicator";
     indicator.className =
@@ -283,6 +301,7 @@ function startMaliciousSpike() {
         </div>
     `;
     document.body.appendChild(indicator);
+    */
 
     const maliciousEl = document.getElementById("mix-malicious");
     if (maliciousEl)
@@ -1413,17 +1432,19 @@ function spawnRequest() {
 
 function updateScore(req, outcome) {
     const typeConfig = req.typeConfig || CONFIG.trafficTypes[req.type];
+    const points = CONFIG.survival.SCORE_POINTS;
 
     if (outcome === "MALICIOUS_BLOCKED") {
-        STATE.score.maliciousBlocked += CONFIG.survival.SCORE_POINTS.MALICIOUS_BLOCKED_SCORE;
-        STATE.score.total += CONFIG.survival.SCORE_POINTS.MALICIOUS_BLOCKED_SCORE;
+        STATE.score.maliciousBlocked += points.MALICIOUS_BLOCKED_SCORE;
+        STATE.score.total += points.MALICIOUS_BLOCKED_SCORE;
+        STATE.reputation = Math.min(100, STATE.reputation + points.SUCCESS_REPUTATION);
         STATE.sound.playFraudBlocked();
     } else if (
         req.type === TRAFFIC_TYPES.MALICIOUS &&
         outcome === "MALICIOUS_PASSED"
     ) {
         STATE.failures.MALICIOUS++;
-        // No reputation penalty in simulation mode
+        STATE.reputation += points.MALICIOUS_PASSED_REPUTATION;
     } else if (outcome === "COMPLETED") {
         const score = typeConfig.score;
 
@@ -1434,17 +1455,29 @@ function updateScore(req, outcome) {
         }
 
         STATE.score.total += score;
-        // No money income in simulation mode
+        STATE.reputation = Math.min(100, STATE.reputation + points.SUCCESS_REPUTATION);
     } else if (outcome === "THROTTLED") {
-        // Soft throttle from API Gateway — no penalty in simulation mode
+        STATE.reputation += points.THROTTLED_REPUTATION;
     } else if (outcome === "FAILED") {
         STATE.score.total -= (typeConfig.score || 5) / 2;
         if (STATE.failures[req.type] !== undefined) {
             STATE.failures[req.type]++;
         }
+        STATE.reputation += points.FAIL_REPUTATION;
     }
 
+    // Explicitly update the Stability Bar UI
+    const repBar = document.getElementById("rep-bar");
+    const repDisplay = document.getElementById("rep-display");
+    if (repBar) repBar.style.width = `${Math.max(0, STATE.reputation)}%`;
+    if (repDisplay) repDisplay.textContent = `${Math.round(Math.max(0, STATE.reputation))}%`;
+
     updateScoreUI();
+
+    // Check for game over
+    if (STATE.reputation <= 0 && STATE.gameMode === "survival") {
+        callPostmortemAPI();
+    }
 }
 
 function finishRequest(req) {
@@ -3152,3 +3185,6 @@ function restoreConnections(savedConnections, internetConnections) {
         createConnection(connData.from, connData.to);
     });
 }
+
+// Initialize AI scenario panel on load
+updateScenarioPanel();
